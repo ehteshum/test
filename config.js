@@ -1,10 +1,11 @@
 const CONFIG = {
     streamUrl: "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
     corsProxies: [
-        "https://api.allorigins.win/raw?url=",
-        "https://api.codetabs.com/v1/proxy?quest=",
-        "https://cors.streamlit.app/",
-        "https://corsproxy.io/?"
+        "https://proxy.cors.sh/",
+        "https://cors-proxy.htmldriven.com/?url=",
+        "https://crossorigin.me/",
+        "https://thingproxy.freeboard.io/fetch/",
+        "https://yacdn.org/proxy/"
     ]
 };
 
@@ -22,8 +23,8 @@ function isGitHubPages() {
 // Function to get the appropriate stream URL based on environment
 function getStreamUrl() {
     if (isGitHubPages()) {
-        // Use the first CORS proxy by default
-        return CONFIG.corsProxies[0] + encodeURIComponent(CONFIG.streamUrl);
+        // Try each proxy in sequence until one works
+        return CONFIG.corsProxies[0] + CONFIG.streamUrl;
     } else {
         // Use direct URL for local development
         return CONFIG.streamUrl;
@@ -35,7 +36,7 @@ function tryAlternativeProxy(currentIndex) {
     if (currentIndex < CONFIG.corsProxies.length - 1) {
         const nextProxy = CONFIG.corsProxies[currentIndex + 1];
         console.log("Trying alternative CORS proxy:", nextProxy);
-        return nextProxy + encodeURIComponent(CONFIG.streamUrl);
+        return nextProxy + CONFIG.streamUrl;
     }
     // If we've tried all proxies, return the original URL as a last resort
     console.log("All CORS proxies failed, trying direct URL");

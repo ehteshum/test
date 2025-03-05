@@ -62,6 +62,13 @@
             gap: 10px;
             margin-top: 20px;
         }
+        .quality-selector {
+            margin: 10px 0;
+            padding: 5px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -70,36 +77,46 @@
         <div class="video-container">
             <video id="video" controls autoplay playsinline crossorigin="anonymous"></video>
         </div>
+        <select class="quality-selector" id="qualitySelector">
+            <option value="auto">Auto Quality</option>
+            <option value="lowest">Lowest Quality (Better Performance)</option>
+            <option value="highest">Highest Quality</option>
+        </select>
         <div class="status" id="status">Initializing player...</div>
         <button id="retry">Retry</button>
         <div class="proxy-buttons">
             <button id="direct">Direct URL</button>
-            <button id="proxy1">AllOrigins Proxy</button>
-            <button id="proxy2">CodeTabs Proxy</button>
-            <button id="proxy3">Streamlit Proxy</button>
-            <button id="proxy4">CORS.io Proxy</button>
+            <button id="proxy1">CORS.sh Proxy</button>
+            <button id="proxy2">HTMLDriven Proxy</button>
+            <button id="proxy3">CrossOrigin.me</button>
+            <button id="proxy4">ThingProxy</button>
+            <button id="proxy5">YaCDN Proxy</button>
         </div>
     </div>
 
     <script>
         const video = document.getElementById('video');
         const status = document.getElementById('status');
+        const qualitySelector = document.getElementById('qualitySelector');
         const retryBtn = document.getElementById('retry');
         const directBtn = document.getElementById('direct');
         const proxy1Btn = document.getElementById('proxy1');
         const proxy2Btn = document.getElementById('proxy2');
         const proxy3Btn = document.getElementById('proxy3');
         const proxy4Btn = document.getElementById('proxy4');
+        const proxy5Btn = document.getElementById('proxy5');
         
         const streamUrl = "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8";
         const corsProxies = [
-            "https://api.allorigins.win/raw?url=",
-            "https://api.codetabs.com/v1/proxy?quest=",
-            "https://cors.streamlit.app/",
-            "https://corsproxy.io/?"
+            "https://proxy.cors.sh/",
+            "https://cors-proxy.htmldriven.com/?url=",
+            "https://crossorigin.me/",
+            "https://thingproxy.freeboard.io/fetch/",
+            "https://yacdn.org/proxy/"
         ];
         
         let hls = null;
+        let currentQuality = 'auto';
         
         function updateStatus(message) {
             status.textContent = message;
@@ -115,20 +132,51 @@
             updateStatus(`Loading stream from: ${url}`);
             
             if (Hls.isSupported()) {
-                hls = new Hls({
+                const hlsConfig = {
                     debug: true,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 30,
+                    maxBufferLength: 15,
+                    maxMaxBufferLength: 30,
+                    maxBufferSize: 10 * 1000 * 1000, // 10MB
+                    manifestLoadingTimeOut: 20000,
+                    manifestLoadingMaxRetry: 6,
+                    manifestLoadingRetryDelay: 1000,
+                    levelLoadingTimeOut: 20000,
+                    levelLoadingMaxRetry: 6,
+                    levelLoadingRetryDelay: 1000,
+                    fragLoadingTimeOut: 20000,
+                    fragLoadingMaxRetry: 6,
+                    fragLoadingRetryDelay: 1000,
+                    startLevel: -1,
+                    abrEwmaDefaultEstimate: 500000,
+                    testBandwidth: true,
+                    progressive: true,
                     xhrSetup: function(xhr) {
                         xhr.withCredentials = false;
                     }
-                });
+                };
+
+                hls = new Hls(hlsConfig);
                 
                 hls.on(Hls.Events.ERROR, function(event, data) {
                     updateStatus(`Error: ${data.type} - ${data.details}`);
                     console.error('HLS error:', data);
                 });
                 
-                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
                     updateStatus('Stream loaded successfully');
+                    
+                    // Handle quality selection
+                    if (currentQuality === 'lowest') {
+                        hls.currentLevel = 0;
+                    } else if (currentQuality === 'highest') {
+                        hls.currentLevel = data.levels.length - 1;
+                    } else {
+                        hls.currentLevel = -1; // Auto
+                    }
+                    
                     video.play().catch(e => {
                         console.error('Autoplay failed:', e);
                         updateStatus('Autoplay failed. Please click play.');
@@ -153,12 +201,26 @@
             }
         }
         
-        // Load with default proxy
-        loadStream(corsProxies[0] + encodeURIComponent(streamUrl));
+        // Quality selector event listener
+        qualitySelector.addEventListener('change', function() {
+            currentQuality = this.value;
+            if (hls) {
+                if (currentQuality === 'lowest') {
+                    hls.currentLevel = 0;
+                } else if (currentQuality === 'highest') {
+                    hls.currentLevel = hls.levels.length - 1;
+                } else {
+                    hls.currentLevel = -1; // Auto
+                }
+            }
+        });
+        
+        // Load with first proxy
+        loadStream(corsProxies[0] + streamUrl);
         
         // Event listeners for buttons
         retryBtn.addEventListener('click', function() {
-            loadStream(corsProxies[0] + encodeURIComponent(streamUrl));
+            loadStream(corsProxies[0] + streamUrl);
         });
         
         directBtn.addEventListener('click', function() {
@@ -166,19 +228,23 @@
         });
         
         proxy1Btn.addEventListener('click', function() {
-            loadStream(corsProxies[0] + encodeURIComponent(streamUrl));
+            loadStream(corsProxies[0] + streamUrl);
         });
         
         proxy2Btn.addEventListener('click', function() {
-            loadStream(corsProxies[1] + encodeURIComponent(streamUrl));
+            loadStream(corsProxies[1] + streamUrl);
         });
         
         proxy3Btn.addEventListener('click', function() {
-            loadStream(corsProxies[2] + encodeURIComponent(streamUrl));
+            loadStream(corsProxies[2] + streamUrl);
         });
         
         proxy4Btn.addEventListener('click', function() {
-            loadStream(corsProxies[3] + encodeURIComponent(streamUrl));
+            loadStream(corsProxies[3] + streamUrl);
+        });
+        
+        proxy5Btn.addEventListener('click', function() {
+            loadStream(corsProxies[4] + streamUrl);
         });
         
         // Global error handler
