@@ -1,11 +1,20 @@
 const CONFIG = {
+    // Primary stream URL
     streamUrl: "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
+    
+    // Backup stream URLs (using different protocols)
+    backupStreamUrls: [
+        "https://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
+        "//kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8"
+    ],
+    
+    // CORS Proxies optimized for media streaming
     corsProxies: [
-        "https://proxy.cors.sh/",
-        "https://cors-proxy.htmldriven.com/?url=",
-        "https://crossorigin.me/",
-        "https://thingproxy.freeboard.io/fetch/",
-        "https://yacdn.org/proxy/"
+        "https://api.allorigins.win/raw?url=",
+        "https://api.codetabs.com/v1/proxy/?quest=",
+        "https://bypass-cors.vercel.app/api?url=",
+        "https://cors-anywhere-c1ph.onrender.com/",
+        "https://cors-anywhere-production-0983.up.railway.app/"
     ]
 };
 
@@ -20,11 +29,27 @@ function isGitHubPages() {
     return !isLocalhost;
 }
 
+// Function to get all possible stream URLs
+function getAllStreamUrls() {
+    const urls = [CONFIG.streamUrl, ...CONFIG.backupStreamUrls];
+    if (isGitHubPages()) {
+        // Add proxied versions of all URLs
+        const proxiedUrls = [];
+        urls.forEach(url => {
+            CONFIG.corsProxies.forEach(proxy => {
+                proxiedUrls.push(proxy + encodeURIComponent(url));
+            });
+        });
+        return [...proxiedUrls, ...urls]; // Include direct URLs as fallback
+    }
+    return urls;
+}
+
 // Function to get the appropriate stream URL based on environment
 function getStreamUrl() {
     if (isGitHubPages()) {
-        // Try each proxy in sequence until one works
-        return CONFIG.corsProxies[0] + CONFIG.streamUrl;
+        // Start with the first proxied URL
+        return CONFIG.corsProxies[0] + encodeURIComponent(CONFIG.streamUrl);
     } else {
         // Use direct URL for local development
         return CONFIG.streamUrl;
@@ -33,16 +58,18 @@ function getStreamUrl() {
 
 // Function to try alternative CORS proxies
 function tryAlternativeProxy(currentIndex) {
-    if (currentIndex < CONFIG.corsProxies.length - 1) {
-        const nextProxy = CONFIG.corsProxies[currentIndex + 1];
-        console.log("Trying alternative CORS proxy:", nextProxy);
-        return nextProxy + CONFIG.streamUrl;
+    const allUrls = getAllStreamUrls();
+    if (currentIndex < allUrls.length - 1) {
+        const nextUrl = allUrls[currentIndex + 1];
+        console.log("Trying alternative URL:", nextUrl);
+        return nextUrl;
     }
-    // If we've tried all proxies, return the original URL as a last resort
-    console.log("All CORS proxies failed, trying direct URL");
+    // If we've tried all URLs, return the original URL as a last resort
+    console.log("All URLs failed, trying direct URL");
     return CONFIG.streamUrl;
 }
 
 // Export the functions
 window.getStreamUrl = getStreamUrl;
 window.tryAlternativeProxy = tryAlternativeProxy;
+window.getAllStreamUrls = getAllStreamUrls;

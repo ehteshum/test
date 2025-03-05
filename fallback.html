@@ -6,7 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
-    <title>Stream Fallback</title>
+    <title>Stream Player</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
     <style>
         body {
@@ -16,7 +16,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             color: white;
             font-family: Arial, sans-serif;
         }
@@ -24,6 +24,7 @@
             width: 90%;
             max-width: 800px;
             text-align: center;
+            padding: 20px;
         }
         .video-container {
             width: 100%;
@@ -31,99 +32,150 @@
             position: relative;
             aspect-ratio: 16/9;
             margin: 0 auto 20px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
         }
         video {
             width: 100%;
             height: 100%;
             object-fit: contain;
         }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
         .status {
-            margin-top: 10px;
             padding: 10px;
             background: rgba(255,255,255,0.1);
             border-radius: 5px;
+            margin: 10px 0;
         }
-        button {
-            background: #0078ff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
+        .quality-selector {
+            padding: 8px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
             border-radius: 5px;
-            cursor: pointer;
-            margin: 5px;
+            color: white;
+            width: 100%;
+            max-width: 300px;
+            margin: 0 auto;
         }
-        button:hover {
-            background: #0056b3;
-        }
-        .proxy-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
+        .buttons-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 10px;
             margin-top: 20px;
         }
-        .quality-selector {
-            margin: 10px 0;
-            padding: 5px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 5px;
+        button {
+            background: #1a73e8;
             color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #1557b0;
+            transform: translateY(-1px);
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top-color: #1a73e8;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: translate(-50%, -50%) rotate(360deg); }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Stream Fallback Player</h1>
+        <h1>Stream Player</h1>
         <div class="video-container">
-            <video id="video" controls autoplay playsinline crossorigin="anonymous"></video>
+            <div id="loading" class="loading"></div>
+            <video id="video" controls playsinline crossorigin="anonymous"></video>
         </div>
-        <select class="quality-selector" id="qualitySelector">
-            <option value="auto">Auto Quality</option>
-            <option value="lowest">Lowest Quality (Better Performance)</option>
-            <option value="highest">Highest Quality</option>
-        </select>
-        <div class="status" id="status">Initializing player...</div>
-        <button id="retry">Retry</button>
-        <div class="proxy-buttons">
-            <button id="direct">Direct URL</button>
-            <button id="proxy1">CORS.sh Proxy</button>
-            <button id="proxy2">HTMLDriven Proxy</button>
-            <button id="proxy3">CrossOrigin.me</button>
-            <button id="proxy4">ThingProxy</button>
-            <button id="proxy5">YaCDN Proxy</button>
+        <div class="controls">
+            <select class="quality-selector" id="qualitySelector">
+                <option value="auto">Auto Quality</option>
+                <option value="lowest">Lowest Quality (Better Performance)</option>
+                <option value="highest">Highest Quality</option>
+            </select>
+            <div class="status" id="status">Initializing player...</div>
+            <div class="buttons-container">
+                <button id="retry">Retry Current</button>
+                <button id="next">Try Next Source</button>
+                <button id="direct">Direct URL</button>
+            </div>
         </div>
     </div>
 
     <script>
         const video = document.getElementById('video');
         const status = document.getElementById('status');
+        const loading = document.getElementById('loading');
         const qualitySelector = document.getElementById('qualitySelector');
         const retryBtn = document.getElementById('retry');
+        const nextBtn = document.getElementById('next');
         const directBtn = document.getElementById('direct');
-        const proxy1Btn = document.getElementById('proxy1');
-        const proxy2Btn = document.getElementById('proxy2');
-        const proxy3Btn = document.getElementById('proxy3');
-        const proxy4Btn = document.getElementById('proxy4');
-        const proxy5Btn = document.getElementById('proxy5');
         
         const streamUrl = "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8";
+        const backupUrls = [
+            "https://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
+            "//kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8"
+        ];
         const corsProxies = [
-            "https://proxy.cors.sh/",
-            "https://cors-proxy.htmldriven.com/?url=",
-            "https://crossorigin.me/",
-            "https://thingproxy.freeboard.io/fetch/",
-            "https://yacdn.org/proxy/"
+            "https://api.allorigins.win/raw?url=",
+            "https://api.codetabs.com/v1/proxy/?quest=",
+            "https://bypass-cors.vercel.app/api?url=",
+            "https://cors-anywhere-c1ph.onrender.com/",
+            "https://cors-anywhere-production-0983.up.railway.app/"
         ];
         
         let hls = null;
         let currentQuality = 'auto';
+        let currentUrlIndex = 0;
+        let allUrls = [];
         
         function updateStatus(message) {
             status.textContent = message;
             console.log(message);
         }
         
+        function showLoading(show) {
+            loading.style.display = show ? 'block' : 'none';
+        }
+        
+        function generateUrls() {
+            const urls = [streamUrl, ...backupUrls];
+            const allPossibleUrls = [];
+            
+            // Add all direct URLs first
+            allPossibleUrls.push(...urls);
+            
+            // Add proxied versions
+            urls.forEach(url => {
+                corsProxies.forEach(proxy => {
+                    allPossibleUrls.push(proxy + encodeURIComponent(url));
+                });
+            });
+            
+            return allPossibleUrls;
+        }
+        
         function loadStream(url) {
+            showLoading(true);
             if (hls) {
                 hls.destroy();
                 hls = null;
@@ -139,7 +191,7 @@
                     backBufferLength: 30,
                     maxBufferLength: 15,
                     maxMaxBufferLength: 30,
-                    maxBufferSize: 10 * 1000 * 1000, // 10MB
+                    maxBufferSize: 10 * 1000 * 1000,
                     manifestLoadingTimeOut: 20000,
                     manifestLoadingMaxRetry: 6,
                     manifestLoadingRetryDelay: 1000,
@@ -161,25 +213,34 @@
                 hls = new Hls(hlsConfig);
                 
                 hls.on(Hls.Events.ERROR, function(event, data) {
-                    updateStatus(`Error: ${data.type} - ${data.details}`);
                     console.error('HLS error:', data);
+                    if (data.fatal) {
+                        showLoading(false);
+                        updateStatus(`Error: ${data.type} - ${data.details}`);
+                        if (currentUrlIndex < allUrls.length - 1) {
+                            setTimeout(() => {
+                                currentUrlIndex++;
+                                loadStream(allUrls[currentUrlIndex]);
+                            }, 1000);
+                        }
+                    }
                 });
                 
                 hls.on(Hls.Events.MANIFEST_PARSED, function(event, data) {
+                    showLoading(false);
                     updateStatus('Stream loaded successfully');
                     
-                    // Handle quality selection
                     if (currentQuality === 'lowest') {
                         hls.currentLevel = 0;
                     } else if (currentQuality === 'highest') {
                         hls.currentLevel = data.levels.length - 1;
                     } else {
-                        hls.currentLevel = -1; // Auto
+                        hls.currentLevel = -1;
                     }
                     
                     video.play().catch(e => {
                         console.error('Autoplay failed:', e);
-                        updateStatus('Autoplay failed. Please click play.');
+                        updateStatus('Click play to start');
                     });
                 });
                 
@@ -190,18 +251,29 @@
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = url;
                 video.addEventListener('loadedmetadata', function() {
+                    showLoading(false);
                     updateStatus('Stream loaded successfully');
                     video.play();
                 });
                 video.addEventListener('error', function() {
+                    showLoading(false);
                     updateStatus('Error loading stream');
+                    if (currentUrlIndex < allUrls.length - 1) {
+                        currentUrlIndex++;
+                        loadStream(allUrls[currentUrlIndex]);
+                    }
                 });
             } else {
+                showLoading(false);
                 updateStatus('Your browser does not support HLS');
             }
         }
         
-        // Quality selector event listener
+        // Initialize
+        allUrls = generateUrls();
+        loadStream(allUrls[0]);
+        
+        // Event Listeners
         qualitySelector.addEventListener('change', function() {
             currentQuality = this.value;
             if (hls) {
@@ -210,47 +282,33 @@
                 } else if (currentQuality === 'highest') {
                     hls.currentLevel = hls.levels.length - 1;
                 } else {
-                    hls.currentLevel = -1; // Auto
+                    hls.currentLevel = -1;
                 }
             }
         });
         
-        // Load with first proxy
-        loadStream(corsProxies[0] + streamUrl);
-        
-        // Event listeners for buttons
         retryBtn.addEventListener('click', function() {
-            loadStream(corsProxies[0] + streamUrl);
+            loadStream(allUrls[currentUrlIndex]);
+        });
+        
+        nextBtn.addEventListener('click', function() {
+            if (currentUrlIndex < allUrls.length - 1) {
+                currentUrlIndex++;
+                loadStream(allUrls[currentUrlIndex]);
+            } else {
+                currentUrlIndex = 0;
+                loadStream(allUrls[currentUrlIndex]);
+            }
         });
         
         directBtn.addEventListener('click', function() {
             loadStream(streamUrl);
         });
         
-        proxy1Btn.addEventListener('click', function() {
-            loadStream(corsProxies[0] + streamUrl);
-        });
-        
-        proxy2Btn.addEventListener('click', function() {
-            loadStream(corsProxies[1] + streamUrl);
-        });
-        
-        proxy3Btn.addEventListener('click', function() {
-            loadStream(corsProxies[2] + streamUrl);
-        });
-        
-        proxy4Btn.addEventListener('click', function() {
-            loadStream(corsProxies[3] + streamUrl);
-        });
-        
-        proxy5Btn.addEventListener('click', function() {
-            loadStream(corsProxies[4] + streamUrl);
-        });
-        
         // Global error handler
         window.addEventListener('error', function(e) {
-            updateStatus(`Global error: ${e.message}`);
             console.error('Global error:', e);
+            updateStatus(`Error: ${e.message}`);
         });
     </script>
 </body>
