@@ -1,17 +1,22 @@
 const CONFIG = {
     streamUrl: "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
     corsProxies: [
-        "https://corsproxy.io/?",
-        "https://cors-anywhere.herokuapp.com/",
-        "https://api.allorigins.win/raw?url="
+        "https://api.allorigins.win/raw?url=",
+        "https://api.codetabs.com/v1/proxy?quest=",
+        "https://cors.streamlit.app/",
+        "https://corsproxy.io/?"
     ]
 };
 
-// Function to determine if we're running on GitHub Pages
+// Function to determine if we're running on GitHub Pages or any remote server
 function isGitHubPages() {
-    return window.location.hostname.includes('github.io') || 
-           window.location.hostname !== 'localhost' && 
-           window.location.hostname !== '127.0.0.1';
+    // Check if running on localhost or 127.0.0.1
+    const isLocalhost = window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1' ||
+                        window.location.hostname === '';
+    
+    // If not localhost, assume we need CORS proxy
+    return !isLocalhost;
 }
 
 // Function to get the appropriate stream URL based on environment
