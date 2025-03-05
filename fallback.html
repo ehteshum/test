@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Fallback</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
+    <style>
+        body {
+            background: #000;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            width: 90%;
+            max-width: 800px;
+            text-align: center;
+        }
+        .video-container {
+            width: 100%;
+            background: #000;
+            position: relative;
+            aspect-ratio: 16/9;
+            margin: 0 auto 20px;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+        }
+        button {
+            background: #0078ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Stream Fallback Player</h1>
+        <div class="video-container">
+            <video id="video" controls autoplay playsinline crossorigin="anonymous"></video>
+        </div>
+        <div class="status" id="status">Initializing player...</div>
+        <button id="retry">Retry</button>
+        <div>
+            <button id="direct">Try Direct URL</button>
+            <button id="proxy1">Try Proxy 1</button>
+            <button id="proxy2">Try Proxy 2</button>
+            <button id="proxy3">Try Proxy 3</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const status = document.getElementById('status');
+        const retryBtn = document.getElementById('retry');
+        const directBtn = document.getElementById('direct');
+        const proxy1Btn = document.getElementById('proxy1');
+        const proxy2Btn = document.getElementById('proxy2');
+        const proxy3Btn = document.getElementById('proxy3');
+        
+        const streamUrl = "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8";
+        const corsProxies = [
+            "https://corsproxy.io/?",
+            "https://cors-anywhere.herokuapp.com/",
+            "https://api.allorigins.win/raw?url="
+        ];
+        
+        let hls = null;
+        
+        function updateStatus(message) {
+            status.textContent = message;
+            console.log(message);
+        }
+        
+        function loadStream(url) {
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+            
+            updateStatus(`Loading stream from: ${url}`);
+            
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    debug: false,
+                    xhrSetup: function(xhr) {
+                        xhr.withCredentials = false;
+                    }
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    updateStatus(`Error: ${data.type} - ${data.details}`);
+                    console.error('HLS error:', data);
+                });
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    updateStatus('Stream loaded successfully');
+                    video.play().catch(e => {
+                        console.error('Autoplay failed:', e);
+                        updateStatus('Autoplay failed. Please click play.');
+                    });
+                });
+                
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MEDIA_ATTACHED, function() {
+                    hls.loadSource(url);
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.addEventListener('loadedmetadata', function() {
+                    updateStatus('Stream loaded successfully');
+                    video.play();
+                });
+                video.addEventListener('error', function() {
+                    updateStatus('Error loading stream');
+                });
+            } else {
+                updateStatus('Your browser does not support HLS');
+            }
+        }
+        
+        // Load with default proxy
+        loadStream(corsProxies[0] + encodeURIComponent(streamUrl));
+        
+        // Event listeners for buttons
+        retryBtn.addEventListener('click', function() {
+            loadStream(corsProxies[0] + encodeURIComponent(streamUrl));
+        });
+        
+        directBtn.addEventListener('click', function() {
+            loadStream(streamUrl);
+        });
+        
+        proxy1Btn.addEventListener('click', function() {
+            loadStream(corsProxies[0] + encodeURIComponent(streamUrl));
+        });
+        
+        proxy2Btn.addEventListener('click', function() {
+            loadStream(corsProxies[1] + encodeURIComponent(streamUrl));
+        });
+        
+        proxy3Btn.addEventListener('click', function() {
+            loadStream(corsProxies[2] + encodeURIComponent(streamUrl));
+        });
+        
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            updateStatus(`Global error: ${e.message}`);
+            console.error('Global error:', e);
+        });
+    </script>
+</body>
+</html> 
