@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="referrer" content="no-referrer">
-    <title>Basic Stream Player</title>
+    <title>Stream Test</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
     <style>
         body {
@@ -49,13 +49,13 @@
 </head>
 <body>
     <div class="player">
-        <video id="video" controls playsinline></video>
+        <video id="video" controls playsinline crossorigin="anonymous"></video>
         <div id="status">Initializing player...</div>
         <div class="controls">
-            <button onclick="tryStream('http')">Try HTTP Stream</button>
-            <button onclick="tryStream('https')">Try HTTPS Stream</button>
-            <button onclick="tryStream('alt')">Try Alternate Stream</button>
-            <button onclick="tryStream('direct')">Try Direct</button>
+            <button onclick="tryStream('test1')">Test Stream 1</button>
+            <button onclick="tryStream('test2')">Test Stream 2</button>
+            <button onclick="tryStream('test3')">Test Stream 3</button>
+            <button onclick="tryStream('main')">Main Stream</button>
         </div>
     </div>
 
@@ -65,10 +65,10 @@
         let hls = null;
 
         const streams = {
-            http: 'http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8',
-            https: 'https://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8',
-            alt: 'http://kst.moonplex.net:8080/CH2/index.m3u8',
-            direct: 'http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8'
+            test1: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+            test2: 'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8',
+            test3: 'https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8',
+            main: 'https://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8'
         };
 
         function updateStatus(message) {
@@ -94,25 +94,31 @@
 
             if (Hls.isSupported()) {
                 hls = new Hls({
-                    debug: false,
+                    debug: true,
                     enableWorker: true,
-                    lowLatencyMode: true,
-                    maxBufferLength: 30,
-                    manifestLoadingTimeOut: 20000,
-                    manifestLoadingMaxRetry: 3,
-                    levelLoadingTimeOut: 20000,
-                    fragLoadingTimeOut: 20000,
-                    startLevel: 0
+                    lowLatencyMode: false,
+                    maxBufferLength: 60,
+                    manifestLoadingTimeOut: 30000,
+                    manifestLoadingMaxRetry: 2,
+                    levelLoadingTimeOut: 30000,
+                    fragLoadingTimeOut: 30000,
+                    startLevel: 0,
+                    abrEwmaDefaultEstimate: 500000,
+                    testBandwidth: false,
+                    xhrSetup: function(xhr) {
+                        xhr.withCredentials = false;
+                    }
                 });
 
                 hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.log('HLS Error:', data);
                     if (data.fatal) {
-                        updateStatus(`Error: ${data.type}. Please try another option.`);
+                        updateStatus(`Error: ${data.type} - ${data.details}. Please try another stream.`);
                     }
                 });
 
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    updateStatus('Stream loaded - Click play to start');
+                    updateStatus('Stream loaded - Starting playback');
                     video.play().catch(() => {
                         video.muted = true;
                         video.play().catch(() => {
@@ -121,40 +127,51 @@
                     });
                 });
 
+                hls.on(Hls.Events.LEVEL_LOADED, function() {
+                    updateStatus('Stream playing');
+                });
+
                 hls.attachMedia(video);
                 hls.loadSource(url);
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = url;
                 video.addEventListener('loadedmetadata', () => {
-                    updateStatus('Stream loaded - Click play to start');
+                    updateStatus('Stream loaded - Starting playback');
                     video.play().catch(() => {
                         video.muted = true;
                         video.play();
                     });
                 });
-                video.addEventListener('error', () => {
-                    updateStatus('Error loading stream - Try another option');
+                video.addEventListener('error', (e) => {
+                    console.log('Video Error:', e);
+                    updateStatus('Error loading stream - Try another stream');
                 });
             } else {
                 updateStatus('Your browser does not support HLS playback');
             }
         }
 
-        // Start with HTTP stream
-        tryStream('http');
+        // Start with test stream
+        tryStream('test1');
 
         // Error handling
-        video.addEventListener('error', () => {
-            updateStatus('Video error - Please try another option');
+        video.addEventListener('error', (e) => {
+            console.log('Video Error:', e);
+            updateStatus('Video error - Please try another stream');
         });
 
         video.addEventListener('stalled', () => {
-            updateStatus('Stream stalled - Please try another option');
+            updateStatus('Stream stalled - Please try another stream');
         });
 
-        window.onerror = function(msg) {
-            updateStatus('Error occurred - Please try another option');
+        video.addEventListener('playing', () => {
+            updateStatus('Stream is playing');
+        });
+
+        window.onerror = function(msg, url, line) {
+            console.log('Error:', msg, 'at', url, ':', line);
+            updateStatus('Error occurred - Please try another stream');
             return false;
         };
     </script>
