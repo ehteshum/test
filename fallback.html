@@ -107,10 +107,11 @@
         const httpsStreamUrl = streamUrl.replace('http://', 'https://');
         
         const proxies = [
+            "https://proxy.cors.sh/",
             "https://api.allorigins.win/raw?url=",
-            "https://corsproxy.org/?",
-            "https://cors.eu.org/",
-            "https://cors-proxy.org/",
+            "https://corsproxy.io/?",
+            "https://cors-anywhere.herokuapp.com/",
+            "https://cors.streamlit.app/",
             "https://api.codetabs.com/v1/proxy?quest="
         ];
 
@@ -156,6 +157,8 @@
                     fragLoadingRetryDelay: 500,
                     startLevel: 0,
                     defaultAudioCodec: 'mp4a.40.2',
+                    progressive: true,
+                    testBandwidth: true,
                     xhrSetup: function(xhr, url) {
                         xhr.withCredentials = false;
                     }
@@ -165,11 +168,18 @@
                     console.error('HLS error:', data);
                     if (data.fatal) {
                         showLoading(false);
-                        updateStatus(`Error: ${data.type} - ${data.details}`);
                         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
                             updateStatus('Network error - Please try a different proxy');
+                            // Try next proxy automatically after 3 seconds
+                            setTimeout(() => {
+                                const currentIndex = parseInt(localStorage.getItem('currentProxyIndex') || '0');
+                                tryProxy(currentIndex + 1);
+                            }, 3000);
                         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            updateStatus('Media error - Attempting to recover...');
                             hls.recoverMediaError();
+                        } else {
+                            updateStatus(`Fatal error: ${data.details}`);
                         }
                     }
                 });
@@ -190,13 +200,15 @@
                     hls.loadSource(url);
                 });
 
-                // Add additional error handlers
                 hls.on(Hls.Events.MANIFEST_LOADING, function() {
                     updateStatus('Loading stream manifest...');
                 });
 
                 hls.on(Hls.Events.LEVEL_LOADED, function() {
                     updateStatus('Stream quality level loaded');
+                    // Store the working proxy index
+                    const currentIndex = parseInt(localStorage.getItem('currentProxyIndex') || '0');
+                    localStorage.setItem('lastWorkingProxyIndex', currentIndex.toString());
                 });
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -212,6 +224,11 @@
                 video.addEventListener('error', function() {
                     showLoading(false);
                     updateStatus('Error loading stream - Try a different proxy');
+                    // Try next proxy automatically
+                    setTimeout(() => {
+                        const currentIndex = parseInt(localStorage.getItem('currentProxyIndex') || '0');
+                        tryProxy(currentIndex + 1);
+                    }, 3000);
                 });
             } else {
                 showLoading(false);
@@ -220,18 +237,28 @@
         }
 
         function tryProxy(index) {
+            localStorage.setItem('currentProxyIndex', index.toString());
             const proxyIndex = Math.floor(index / 2);
             const useHttps = index % 2 === 1;
+            
+            if (proxyIndex >= proxies.length) {
+                updateStatus('All proxies tried - Please refresh the page or try again later');
+                return;
+            }
+            
             const url = proxies[proxyIndex] + encodeURIComponent(useHttps ? httpsStreamUrl : streamUrl);
             loadStream(url);
         }
 
         function tryDirect() {
+            localStorage.removeItem('currentProxyIndex');
+            localStorage.removeItem('lastWorkingProxyIndex');
             loadStream(streamUrl);
         }
 
-        // Start with first proxy using HTTPS
-        tryProxy(1);
+        // Start with last working proxy if available
+        const lastWorkingIndex = parseInt(localStorage.getItem('lastWorkingProxyIndex') || '1');
+        tryProxy(lastWorkingIndex);
 
         // Add error event listeners
         video.addEventListener('error', function(e) {
