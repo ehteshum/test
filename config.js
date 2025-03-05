@@ -1,15 +1,20 @@
 const CONFIG = {
-    // Primary stream URL
-    streamUrl: "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
+    // Primary stream URL with multiple fallbacks
+    streamUrls: [
+        "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
+        "https://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
+        "http://kst.moonplex.net:8080/CH2/index.m3u8",
+        "https://kst.moonplex.net:8080/CH2/index.m3u8"
+    ],
     
     // CORS Proxies optimized for media streaming
     corsProxies: [
-        "https://proxy.cors.sh/",
+        "https://cors.streamlit.app/",
         "https://api.allorigins.win/raw?url=",
         "https://corsproxy.io/?",
-        "https://cors-anywhere.herokuapp.com/",
-        "https://cors.streamlit.app/",
-        "https://api.codetabs.com/v1/proxy?quest="
+        "https://api.codetabs.com/v1/proxy?quest=",
+        "https://cors-proxy.org/",
+        "https://crossorigin.me/"
     ]
 };
 
@@ -20,41 +25,43 @@ function isGitHubPages() {
 
 // Function to get the appropriate stream URL based on environment
 function getStreamUrl() {
-    // Try each proxy in sequence
-    const proxyIndex = localStorage.getItem('lastWorkingProxyIndex') || 0;
-    const proxy = CONFIG.corsProxies[proxyIndex];
+    const urlIndex = parseInt(localStorage.getItem('lastWorkingUrlIndex') || '0');
+    const proxyIndex = parseInt(localStorage.getItem('lastWorkingProxyIndex') || '0');
     
-    // Try HTTPS version first, then HTTP if HTTPS fails
-    const httpsUrl = CONFIG.streamUrl.replace('http://', 'https://');
-    return proxy + encodeURIComponent(httpsUrl);
+    // Get the stream URL and proxy
+    const streamUrl = CONFIG.streamUrls[urlIndex] || CONFIG.streamUrls[0];
+    const proxy = CONFIG.corsProxies[proxyIndex] || CONFIG.corsProxies[0];
+    
+    return proxy + encodeURIComponent(streamUrl);
 }
 
 // Function to try alternative CORS proxies
 function tryAlternativeProxy(currentIndex) {
-    if (currentIndex < CONFIG.corsProxies.length) {
-        const nextProxy = CONFIG.corsProxies[currentIndex];
+    if (currentIndex < CONFIG.corsProxies.length * CONFIG.streamUrls.length) {
+        const proxyIndex = Math.floor(currentIndex / CONFIG.streamUrls.length);
+        const urlIndex = currentIndex % CONFIG.streamUrls.length;
         
-        // Try both HTTP and HTTPS versions
-        const urls = [
-            CONFIG.streamUrl.replace('http://', 'https://'),  // Try HTTPS first
-            CONFIG.streamUrl  // Fallback to HTTP
-        ];
+        const proxy = CONFIG.corsProxies[proxyIndex];
+        const streamUrl = CONFIG.streamUrls[urlIndex];
         
-        // Alternate between HTTPS and HTTP versions
-        const url = urls[currentIndex % 2];
-        
-        // Store the last working proxy index
+        // Store the indices if they worked
         if (currentIndex > 0) {
-            localStorage.setItem('lastWorkingProxyIndex', (currentIndex - 1).toString());
+            localStorage.setItem('lastWorkingProxyIndex', proxyIndex.toString());
+            localStorage.setItem('lastWorkingUrlIndex', urlIndex.toString());
         }
         
-        console.log("Trying proxy:", nextProxy, "with URL:", url);
-        return nextProxy + encodeURIComponent(url);
+        console.log("Trying proxy:", proxy, "with URL:", streamUrl);
+        return proxy + encodeURIComponent(streamUrl);
     }
     
-    // If all proxies fail, try direct URL as last resort
-    console.log("All proxies failed, trying direct URL");
-    return CONFIG.streamUrl;
+    // If all combinations fail, try direct URLs in sequence
+    const directUrlIndex = Math.min(
+        Math.floor((currentIndex - (CONFIG.corsProxies.length * CONFIG.streamUrls.length)) / 2),
+        CONFIG.streamUrls.length - 1
+    );
+    
+    console.log("All proxies failed, trying direct URL:", CONFIG.streamUrls[directUrlIndex]);
+    return CONFIG.streamUrls[directUrlIndex];
 }
 
 // Export the functions

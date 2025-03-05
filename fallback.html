@@ -6,7 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
-    <title>Stream Player</title>
+    <title>Simple Stream Player</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
     <style>
         body {
@@ -77,7 +77,7 @@
     </style>
 </head>
 <body>
-    <h1>Stream Player</h1>
+    <h1>Simple Stream Player</h1>
     <div class="video-container">
         <div id="loading" class="loading"></div>
         <video id="video" controls playsinline crossorigin="anonymous"></video>
@@ -85,15 +85,14 @@
     <div class="controls">
         <div id="status" class="status">Initializing...</div>
         <div>
-            <button onclick="tryProxy(0)">Proxy 1 (HTTP)</button>
-            <button onclick="tryProxy(1)">Proxy 1 (HTTPS)</button>
-            <button onclick="tryProxy(2)">Proxy 2 (HTTP)</button>
-            <button onclick="tryProxy(3)">Proxy 2 (HTTPS)</button>
+            <button onclick="tryStream(0)">Stream 1 (HTTP)</button>
+            <button onclick="tryStream(1)">Stream 1 (HTTPS)</button>
+            <button onclick="tryStream(2)">Stream 2 (HTTP)</button>
+            <button onclick="tryStream(3)">Stream 2 (HTTPS)</button>
         </div>
         <div style="margin-top: 10px;">
-            <button onclick="tryProxy(4)">Proxy 3 (HTTP)</button>
-            <button onclick="tryProxy(5)">Proxy 3 (HTTPS)</button>
-            <button onclick="tryDirect()">Direct URL</button>
+            <button onclick="tryDirect()">Try Direct</button>
+            <button onclick="resetPlayer()">Reset Player</button>
         </div>
     </div>
 
@@ -103,16 +102,20 @@
         const loading = document.getElementById('loading');
         let hls = null;
 
-        const streamUrl = "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8";
-        const httpsStreamUrl = streamUrl.replace('http://', 'https://');
-        
+        const streamUrls = [
+            "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
+            "https://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
+            "http://kst.moonplex.net:8080/CH2/index.m3u8",
+            "https://kst.moonplex.net:8080/CH2/index.m3u8"
+        ];
+
         const proxies = [
-            "https://proxy.cors.sh/",
+            "https://cors.streamlit.app/",
             "https://api.allorigins.win/raw?url=",
             "https://corsproxy.io/?",
-            "https://cors-anywhere.herokuapp.com/",
-            "https://cors.streamlit.app/",
-            "https://api.codetabs.com/v1/proxy?quest="
+            "https://api.codetabs.com/v1/proxy?quest=",
+            "https://cors-proxy.org/",
+            "https://crossorigin.me/"
         ];
 
         function updateStatus(message) {
@@ -140,21 +143,21 @@
 
             if (Hls.isSupported()) {
                 hls = new Hls({
-                    debug: true,
+                    debug: false,
                     enableWorker: true,
                     lowLatencyMode: true,
                     backBufferLength: 0,
                     maxBufferLength: 10,
                     maxMaxBufferLength: 20,
-                    manifestLoadingTimeOut: 30000,
-                    manifestLoadingMaxRetry: 8,
-                    manifestLoadingRetryDelay: 500,
-                    levelLoadingTimeOut: 30000,
-                    levelLoadingMaxRetry: 8,
-                    levelLoadingRetryDelay: 500,
-                    fragLoadingTimeOut: 30000,
-                    fragLoadingMaxRetry: 8,
-                    fragLoadingRetryDelay: 500,
+                    manifestLoadingTimeOut: 20000,
+                    manifestLoadingMaxRetry: 6,
+                    manifestLoadingRetryDelay: 1000,
+                    levelLoadingTimeOut: 20000,
+                    levelLoadingMaxRetry: 6,
+                    levelLoadingRetryDelay: 1000,
+                    fragLoadingTimeOut: 20000,
+                    fragLoadingMaxRetry: 6,
+                    fragLoadingRetryDelay: 1000,
                     startLevel: 0,
                     defaultAudioCodec: 'mp4a.40.2',
                     progressive: true,
@@ -169,17 +172,14 @@
                     if (data.fatal) {
                         showLoading(false);
                         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                            updateStatus('Network error - Please try a different proxy');
-                            // Try next proxy automatically after 3 seconds
-                            setTimeout(() => {
-                                const currentIndex = parseInt(localStorage.getItem('currentProxyIndex') || '0');
-                                tryProxy(currentIndex + 1);
-                            }, 3000);
+                            updateStatus('Network error - Trying next option...');
+                            tryNextOption();
                         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
                             updateStatus('Media error - Attempting to recover...');
                             hls.recoverMediaError();
                         } else {
                             updateStatus(`Fatal error: ${data.details}`);
+                            tryNextOption();
                         }
                     }
                 });
@@ -196,20 +196,7 @@
                 });
 
                 hls.attachMedia(video);
-                hls.on(Hls.Events.MEDIA_ATTACHED, function() {
-                    hls.loadSource(url);
-                });
-
-                hls.on(Hls.Events.MANIFEST_LOADING, function() {
-                    updateStatus('Loading stream manifest...');
-                });
-
-                hls.on(Hls.Events.LEVEL_LOADED, function() {
-                    updateStatus('Stream quality level loaded');
-                    // Store the working proxy index
-                    const currentIndex = parseInt(localStorage.getItem('currentProxyIndex') || '0');
-                    localStorage.setItem('lastWorkingProxyIndex', currentIndex.toString());
-                });
+                hls.loadSource(url);
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = url;
@@ -223,12 +210,8 @@
                 });
                 video.addEventListener('error', function() {
                     showLoading(false);
-                    updateStatus('Error loading stream - Try a different proxy');
-                    // Try next proxy automatically
-                    setTimeout(() => {
-                        const currentIndex = parseInt(localStorage.getItem('currentProxyIndex') || '0');
-                        tryProxy(currentIndex + 1);
-                    }, 3000);
+                    updateStatus('Error loading stream - Trying next option...');
+                    tryNextOption();
                 });
             } else {
                 showLoading(false);
@@ -236,43 +219,62 @@
             }
         }
 
-        function tryProxy(index) {
-            localStorage.setItem('currentProxyIndex', index.toString());
-            const proxyIndex = Math.floor(index / 2);
-            const useHttps = index % 2 === 1;
-            
-            if (proxyIndex >= proxies.length) {
-                updateStatus('All proxies tried - Please refresh the page or try again later');
-                return;
+        let currentProxyIndex = 0;
+        let currentUrlIndex = 0;
+
+        function tryNextOption() {
+            currentProxyIndex++;
+            if (currentProxyIndex >= proxies.length) {
+                currentProxyIndex = 0;
+                currentUrlIndex++;
+                if (currentUrlIndex >= streamUrls.length) {
+                    updateStatus('All options tried - Please try again later');
+                    return;
+                }
             }
-            
-            const url = proxies[proxyIndex] + encodeURIComponent(useHttps ? httpsStreamUrl : streamUrl);
+            tryStream(currentUrlIndex, currentProxyIndex);
+        }
+
+        function tryStream(urlIndex, proxyIndex = 0) {
+            currentUrlIndex = urlIndex;
+            currentProxyIndex = proxyIndex;
+            const streamUrl = streamUrls[urlIndex];
+            const proxy = proxies[proxyIndex];
+            const url = proxy + encodeURIComponent(streamUrl);
             loadStream(url);
         }
 
         function tryDirect() {
-            localStorage.removeItem('currentProxyIndex');
-            localStorage.removeItem('lastWorkingProxyIndex');
-            loadStream(streamUrl);
+            const urlIndex = parseInt(localStorage.getItem('lastWorkingUrlIndex') || '0');
+            loadStream(streamUrls[urlIndex]);
         }
 
-        // Start with last working proxy if available
-        const lastWorkingIndex = parseInt(localStorage.getItem('lastWorkingProxyIndex') || '1');
-        tryProxy(lastWorkingIndex);
+        function resetPlayer() {
+            localStorage.removeItem('lastWorkingUrlIndex');
+            localStorage.removeItem('lastWorkingProxyIndex');
+            currentProxyIndex = 0;
+            currentUrlIndex = 0;
+            tryStream(0);
+        }
 
-        // Add error event listeners
+        // Start with the first stream URL and proxy
+        tryStream(0);
+
+        // Error handling
         video.addEventListener('error', function(e) {
             console.error('Video error:', e);
-            updateStatus('Video error - Try a different proxy');
+            updateStatus('Video error - Trying next option...');
+            tryNextOption();
         });
 
         video.addEventListener('stalled', function() {
-            updateStatus('Stream stalled - Try a different proxy');
+            updateStatus('Stream stalled - Trying next option...');
+            setTimeout(tryNextOption, 5000);
         });
 
         window.onerror = function(msg, url, lineNo, columnNo, error) {
             console.error('Window error:', msg, error);
-            updateStatus('Error occurred - Try refreshing the page');
+            updateStatus('Error occurred - Please try refreshing');
             return false;
         };
     </script>
