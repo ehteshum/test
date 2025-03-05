@@ -6,7 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
-    <title>Simple Stream Player</title>
+    <title>Stream Player</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
     <style>
         body {
@@ -77,17 +77,24 @@
     </style>
 </head>
 <body>
-    <h1>Simple Stream Player</h1>
+    <h1>Stream Player</h1>
     <div class="video-container">
         <div id="loading" class="loading"></div>
         <video id="video" controls playsinline crossorigin="anonymous"></video>
     </div>
     <div class="controls">
         <div id="status" class="status">Initializing...</div>
-        <button onclick="tryProxy(0)">Try Proxy 1</button>
-        <button onclick="tryProxy(1)">Try Proxy 2</button>
-        <button onclick="tryProxy(2)">Try Proxy 3</button>
-        <button onclick="tryDirect()">Try Direct</button>
+        <div>
+            <button onclick="tryProxy(0)">Proxy 1 (HTTP)</button>
+            <button onclick="tryProxy(1)">Proxy 1 (HTTPS)</button>
+            <button onclick="tryProxy(2)">Proxy 2 (HTTP)</button>
+            <button onclick="tryProxy(3)">Proxy 2 (HTTPS)</button>
+        </div>
+        <div style="margin-top: 10px;">
+            <button onclick="tryProxy(4)">Proxy 3 (HTTP)</button>
+            <button onclick="tryProxy(5)">Proxy 3 (HTTPS)</button>
+            <button onclick="tryDirect()">Direct URL</button>
+        </div>
     </div>
 
     <script>
@@ -97,10 +104,14 @@
         let hls = null;
 
         const streamUrl = "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8";
+        const httpsStreamUrl = streamUrl.replace('http://', 'https://');
+        
         const proxies = [
-            "https://proxy.cors.sh/",
-            "https://cors.streamlit.app/",
-            "https://api.allorigins.win/raw?url="
+            "https://api.allorigins.win/raw?url=",
+            "https://corsproxy.org/?",
+            "https://cors.eu.org/",
+            "https://cors-proxy.org/",
+            "https://api.codetabs.com/v1/proxy?quest="
         ];
 
         function updateStatus(message) {
@@ -128,29 +139,38 @@
 
             if (Hls.isSupported()) {
                 hls = new Hls({
-                    debug: false,
+                    debug: true,
                     enableWorker: true,
                     lowLatencyMode: true,
-                    backBufferLength: 30,
-                    maxBufferLength: 15,
-                    maxMaxBufferLength: 30,
-                    manifestLoadingTimeOut: 20000,
-                    manifestLoadingMaxRetry: 6,
-                    manifestLoadingRetryDelay: 1000,
-                    fragLoadingTimeOut: 20000,
-                    fragLoadingMaxRetry: 6,
-                    fragLoadingRetryDelay: 1000,
+                    backBufferLength: 0,
+                    maxBufferLength: 10,
+                    maxMaxBufferLength: 20,
+                    manifestLoadingTimeOut: 30000,
+                    manifestLoadingMaxRetry: 8,
+                    manifestLoadingRetryDelay: 500,
+                    levelLoadingTimeOut: 30000,
+                    levelLoadingMaxRetry: 8,
+                    levelLoadingRetryDelay: 500,
+                    fragLoadingTimeOut: 30000,
+                    fragLoadingMaxRetry: 8,
+                    fragLoadingRetryDelay: 500,
                     startLevel: 0,
                     defaultAudioCodec: 'mp4a.40.2',
-                    xhrSetup: function(xhr) {
+                    xhrSetup: function(xhr, url) {
                         xhr.withCredentials = false;
                     }
                 });
 
                 hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error('HLS error:', data);
                     if (data.fatal) {
                         showLoading(false);
                         updateStatus(`Error: ${data.type} - ${data.details}`);
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            updateStatus('Network error - Please try a different proxy');
+                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            hls.recoverMediaError();
+                        }
                     }
                 });
 
@@ -159,7 +179,9 @@
                     updateStatus('Stream loaded successfully');
                     video.play().catch(() => {
                         video.muted = true;
-                        video.play();
+                        video.play().catch(() => {
+                            updateStatus('Click play to start');
+                        });
                     });
                 });
 
@@ -167,16 +189,29 @@
                 hls.on(Hls.Events.MEDIA_ATTACHED, function() {
                     hls.loadSource(url);
                 });
+
+                // Add additional error handlers
+                hls.on(Hls.Events.MANIFEST_LOADING, function() {
+                    updateStatus('Loading stream manifest...');
+                });
+
+                hls.on(Hls.Events.LEVEL_LOADED, function() {
+                    updateStatus('Stream quality level loaded');
+                });
+
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = url;
                 video.addEventListener('loadedmetadata', function() {
                     showLoading(false);
                     updateStatus('Stream loaded successfully');
-                    video.play();
+                    video.play().catch(() => {
+                        video.muted = true;
+                        video.play();
+                    });
                 });
                 video.addEventListener('error', function() {
                     showLoading(false);
-                    updateStatus('Error loading stream');
+                    updateStatus('Error loading stream - Try a different proxy');
                 });
             } else {
                 showLoading(false);
@@ -185,7 +220,9 @@
         }
 
         function tryProxy(index) {
-            const url = proxies[index] + streamUrl;
+            const proxyIndex = Math.floor(index / 2);
+            const useHttps = index % 2 === 1;
+            const url = proxies[proxyIndex] + encodeURIComponent(useHttps ? httpsStreamUrl : streamUrl);
             loadStream(url);
         }
 
@@ -193,9 +230,24 @@
             loadStream(streamUrl);
         }
 
-        // Start with first proxy
-        tryProxy(0);
+        // Start with first proxy using HTTPS
+        tryProxy(1);
+
+        // Add error event listeners
+        video.addEventListener('error', function(e) {
+            console.error('Video error:', e);
+            updateStatus('Video error - Try a different proxy');
+        });
+
+        video.addEventListener('stalled', function() {
+            updateStatus('Stream stalled - Try a different proxy');
+        });
+
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('Window error:', msg, error);
+            updateStatus('Error occurred - Try refreshing the page');
+            return false;
+        };
     </script>
 </body>
-</html> 
 </html> 

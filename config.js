@@ -4,9 +4,11 @@ const CONFIG = {
     
     // CORS Proxies optimized for media streaming
     corsProxies: [
-        "https://proxy.cors.sh/",
-        "https://cors.streamlit.app/",
-        "https://api.allorigins.win/raw?url="
+        "https://api.allorigins.win/raw?url=",
+        "https://corsproxy.org/?",
+        "https://cors.eu.org/",
+        "https://cors-proxy.org/",
+        "https://api.codetabs.com/v1/proxy?quest="
     ]
 };
 
@@ -17,16 +19,23 @@ function isGitHubPages() {
 
 // Function to get the appropriate stream URL based on environment
 function getStreamUrl() {
-    // Use the first proxy by default
-    return CONFIG.corsProxies[0] + CONFIG.streamUrl;
+    // Try HTTPS version first
+    const httpsUrl = CONFIG.streamUrl.replace('http://', 'https://');
+    return CONFIG.corsProxies[0] + encodeURIComponent(httpsUrl);
 }
 
 // Function to try alternative CORS proxies
 function tryAlternativeProxy(currentIndex) {
     if (currentIndex < CONFIG.corsProxies.length) {
         const nextProxy = CONFIG.corsProxies[currentIndex];
-        console.log("Trying proxy:", nextProxy);
-        return nextProxy + CONFIG.streamUrl;
+        // Try both HTTP and HTTPS versions of the stream URL
+        const urls = [
+            CONFIG.streamUrl,
+            CONFIG.streamUrl.replace('http://', 'https://')
+        ];
+        const url = urls[currentIndex % 2];
+        console.log("Trying proxy:", nextProxy, "with URL:", url);
+        return nextProxy + encodeURIComponent(url);
     }
     // If we've tried all proxies, return the original URL as a last resort
     console.log("All proxies failed, trying direct URL");
