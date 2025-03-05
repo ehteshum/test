@@ -5,126 +5,75 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="referrer" content="no-referrer">
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
-    <title>Simple Stream Player</title>
+    <title>Basic Stream Player</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.12/dist/hls.min.js"></script>
     <style>
         body {
-            background: #000;
             margin: 0;
             padding: 20px;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            background: #000;
             color: white;
             font-family: Arial, sans-serif;
         }
-        .video-container {
-            width: 100%;
+        .player {
             max-width: 800px;
-            background: #000;
-            position: relative;
-            aspect-ratio: 16/9;
-            margin: 20px auto;
-            border-radius: 8px;
-            overflow: hidden;
+            margin: 0 auto;
         }
         video {
             width: 100%;
-            height: 100%;
-            object-fit: contain;
+            background: #000;
         }
         .controls {
-            width: 100%;
-            max-width: 800px;
-            margin: 20px auto;
+            margin: 20px 0;
             text-align: center;
         }
-        .status {
-            background: rgba(255,255,255,0.1);
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
-        }
         button {
-            background: #1a73e8;
+            background: #2196F3;
             color: white;
             border: none;
             padding: 10px 20px;
             margin: 5px;
-            border-radius: 4px;
             cursor: pointer;
+            border-radius: 4px;
         }
         button:hover {
-            background: #1557b0;
+            background: #1976D2;
         }
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255,255,255,0.1);
-            border-top-color: #1a73e8;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: translate(-50%, -50%) rotate(360deg); }
+        #status {
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
         }
     </style>
 </head>
 <body>
-    <h1>Simple Stream Player</h1>
-    <div class="video-container">
-        <div id="loading" class="loading"></div>
-        <video id="video" controls playsinline crossorigin="anonymous"></video>
-    </div>
-    <div class="controls">
-        <div id="status" class="status">Initializing...</div>
-        <div>
-            <button onclick="tryStream(0)">Stream 1 (HTTP)</button>
-            <button onclick="tryStream(1)">Stream 1 (HTTPS)</button>
-            <button onclick="tryStream(2)">Stream 2 (HTTP)</button>
-            <button onclick="tryStream(3)">Stream 2 (HTTPS)</button>
-        </div>
-        <div style="margin-top: 10px;">
-            <button onclick="tryDirect()">Try Direct</button>
-            <button onclick="resetPlayer()">Reset Player</button>
+    <div class="player">
+        <video id="video" controls playsinline></video>
+        <div id="status">Initializing player...</div>
+        <div class="controls">
+            <button onclick="tryStream('http')">Try HTTP Stream</button>
+            <button onclick="tryStream('https')">Try HTTPS Stream</button>
+            <button onclick="tryStream('alt')">Try Alternate Stream</button>
+            <button onclick="tryStream('direct')">Try Direct</button>
         </div>
     </div>
 
     <script>
         const video = document.getElementById('video');
         const status = document.getElementById('status');
-        const loading = document.getElementById('loading');
         let hls = null;
 
-        const streamUrls = [
-            "http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
-            "https://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8",
-            "http://kst.moonplex.net:8080/CH2/index.m3u8",
-            "https://kst.moonplex.net:8080/CH2/index.m3u8"
-        ];
-
-        const proxies = [
-            "https://cors.streamlit.app/",
-            "https://api.allorigins.win/raw?url=",
-            "https://corsproxy.io/?",
-            "https://api.codetabs.com/v1/proxy?quest=",
-            "https://cors-proxy.org/",
-            "https://crossorigin.me/"
-        ];
+        const streams = {
+            http: 'http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8',
+            https: 'https://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8',
+            alt: 'http://kst.moonplex.net:8080/CH2/index.m3u8',
+            direct: 'http://kst.moonplex.net:8080/CH2/tracks-v1a1/mono.m3u8'
+        };
 
         function updateStatus(message) {
             status.textContent = message;
             console.log(message);
-        }
-
-        function showLoading(show) {
-            loading.style.display = show ? 'block' : 'none';
         }
 
         function destroyPlayer() {
@@ -132,61 +81,38 @@
                 hls.destroy();
                 hls = null;
             }
-            video.removeAttribute('src');
-            video.load();
+            if (video.src) {
+                video.removeAttribute('src');
+                video.load();
+            }
         }
 
-        function loadStream(url) {
-            showLoading(true);
+        function tryStream(type) {
             destroyPlayer();
-            updateStatus(`Loading stream from: ${url}`);
+            const url = streams[type];
+            updateStatus('Loading stream...');
 
             if (Hls.isSupported()) {
                 hls = new Hls({
                     debug: false,
                     enableWorker: true,
                     lowLatencyMode: true,
-                    backBufferLength: 0,
-                    maxBufferLength: 10,
-                    maxMaxBufferLength: 20,
+                    maxBufferLength: 30,
                     manifestLoadingTimeOut: 20000,
-                    manifestLoadingMaxRetry: 6,
-                    manifestLoadingRetryDelay: 1000,
+                    manifestLoadingMaxRetry: 3,
                     levelLoadingTimeOut: 20000,
-                    levelLoadingMaxRetry: 6,
-                    levelLoadingRetryDelay: 1000,
                     fragLoadingTimeOut: 20000,
-                    fragLoadingMaxRetry: 6,
-                    fragLoadingRetryDelay: 1000,
-                    startLevel: 0,
-                    defaultAudioCodec: 'mp4a.40.2',
-                    progressive: true,
-                    testBandwidth: true,
-                    xhrSetup: function(xhr, url) {
-                        xhr.withCredentials = false;
-                    }
+                    startLevel: 0
                 });
 
                 hls.on(Hls.Events.ERROR, function(event, data) {
-                    console.error('HLS error:', data);
                     if (data.fatal) {
-                        showLoading(false);
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                            updateStatus('Network error - Trying next option...');
-                            tryNextOption();
-                        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                            updateStatus('Media error - Attempting to recover...');
-                            hls.recoverMediaError();
-                        } else {
-                            updateStatus(`Fatal error: ${data.details}`);
-                            tryNextOption();
-                        }
+                        updateStatus(`Error: ${data.type}. Please try another option.`);
                     }
                 });
 
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    showLoading(false);
-                    updateStatus('Stream loaded successfully');
+                    updateStatus('Stream loaded - Click play to start');
                     video.play().catch(() => {
                         video.muted = true;
                         video.play().catch(() => {
@@ -200,81 +126,35 @@
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = url;
-                video.addEventListener('loadedmetadata', function() {
-                    showLoading(false);
-                    updateStatus('Stream loaded successfully');
+                video.addEventListener('loadedmetadata', () => {
+                    updateStatus('Stream loaded - Click play to start');
                     video.play().catch(() => {
                         video.muted = true;
                         video.play();
                     });
                 });
-                video.addEventListener('error', function() {
-                    showLoading(false);
-                    updateStatus('Error loading stream - Trying next option...');
-                    tryNextOption();
+                video.addEventListener('error', () => {
+                    updateStatus('Error loading stream - Try another option');
                 });
             } else {
-                showLoading(false);
                 updateStatus('Your browser does not support HLS playback');
             }
         }
 
-        let currentProxyIndex = 0;
-        let currentUrlIndex = 0;
-
-        function tryNextOption() {
-            currentProxyIndex++;
-            if (currentProxyIndex >= proxies.length) {
-                currentProxyIndex = 0;
-                currentUrlIndex++;
-                if (currentUrlIndex >= streamUrls.length) {
-                    updateStatus('All options tried - Please try again later');
-                    return;
-                }
-            }
-            tryStream(currentUrlIndex, currentProxyIndex);
-        }
-
-        function tryStream(urlIndex, proxyIndex = 0) {
-            currentUrlIndex = urlIndex;
-            currentProxyIndex = proxyIndex;
-            const streamUrl = streamUrls[urlIndex];
-            const proxy = proxies[proxyIndex];
-            const url = proxy + encodeURIComponent(streamUrl);
-            loadStream(url);
-        }
-
-        function tryDirect() {
-            const urlIndex = parseInt(localStorage.getItem('lastWorkingUrlIndex') || '0');
-            loadStream(streamUrls[urlIndex]);
-        }
-
-        function resetPlayer() {
-            localStorage.removeItem('lastWorkingUrlIndex');
-            localStorage.removeItem('lastWorkingProxyIndex');
-            currentProxyIndex = 0;
-            currentUrlIndex = 0;
-            tryStream(0);
-        }
-
-        // Start with the first stream URL and proxy
-        tryStream(0);
+        // Start with HTTP stream
+        tryStream('http');
 
         // Error handling
-        video.addEventListener('error', function(e) {
-            console.error('Video error:', e);
-            updateStatus('Video error - Trying next option...');
-            tryNextOption();
+        video.addEventListener('error', () => {
+            updateStatus('Video error - Please try another option');
         });
 
-        video.addEventListener('stalled', function() {
-            updateStatus('Stream stalled - Trying next option...');
-            setTimeout(tryNextOption, 5000);
+        video.addEventListener('stalled', () => {
+            updateStatus('Stream stalled - Please try another option');
         });
 
-        window.onerror = function(msg, url, lineNo, columnNo, error) {
-            console.error('Window error:', msg, error);
-            updateStatus('Error occurred - Please try refreshing');
+        window.onerror = function(msg) {
+            updateStatus('Error occurred - Please try another option');
             return false;
         };
     </script>
